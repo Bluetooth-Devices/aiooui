@@ -15,6 +15,8 @@ def build(setup_kwargs: dict[str, Any]) -> None:
         **setup_kwargs,
         long_description_content_type="text/markdown",
         script_args=["bdist_wheel"],
+        maintainer="Bluetooth Devices",
+        maintainer_email="bluetooth@koston.org",
         options={
             "bdist_wheel": {"plat_name": "any"},
         },
