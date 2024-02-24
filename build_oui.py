@@ -2,18 +2,32 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 from typing import Any
+
+import setuptools
 
 
 def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
+    setuptools.setup(
+        **setup_kwargs,
+        script_args=["bdist_wheel"],
+        options={
+            "bdist_wheel": {"plat_name": "any"},
+        },
+    )
+
     for _ in range(3):
         try:
             _regenerate_ouis()
             return
         except Exception as e:
             print(f"Failed to regenerate OUI data: {e}")
+
+    if os.environ.get("AIOOUI_REQUIRE_REGENERATE"):
+        raise RuntimeError("Failed to regenerate OUI data")
 
     print("Using existing data.")
 
