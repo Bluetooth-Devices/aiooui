@@ -15,7 +15,6 @@ def build(setup_kwargs: dict[str, Any]) -> None:
         script_args=["bdist_wheel"],
         options={
             "bdist_wheel": {"plat_name": "any"},
-            "egg_info": {"egg_base": "./build/"},
         },
     )
 
