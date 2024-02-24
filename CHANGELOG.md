@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4 (2024-02-24)
+
+### Fix
+
+- Build failure (#6) ([`2c0fdc9`](https://github.com/Bluetooth-Devices/aiooui/commit/2c0fdc9685993ffafdb80f5e8a42264748cc792e))
+
 ## v0.1.3 (2024-02-24)
 
 ### Fix
