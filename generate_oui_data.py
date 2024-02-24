@@ -7,7 +7,7 @@ import requests  # type: ignore
 
 def generate() -> None:
     """Generate the OUI data."""
-    resp = requests.get("http://standards-oui.ieee.org/oui.txt", timeout=10)
+    resp = requests.get("https://standards-oui.ieee.org/oui.txt", timeout=10)
     resp.raise_for_status()
     oui_bytes = resp.content
     oui_to_vendor = {}
