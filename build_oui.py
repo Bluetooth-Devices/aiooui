@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 from typing import Any
 
@@ -24,6 +25,9 @@ def build(setup_kwargs: dict[str, Any]) -> None:
             return
         except Exception as e:
             print(f"Failed to regenerate OUI data: {e}")
+
+    if os.environ.get("AIOOUI_REQUIRE_REGENERATE"):
+        raise RuntimeError("Failed to regenerate OUI data")
 
     print("Using existing data.")
 
