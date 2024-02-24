@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.5 (2024-02-24)
+
+### Fix
+
+- Invalid defaults (#7) ([`5b84d34`](https://github.com/Bluetooth-Devices/aiooui/commit/5b84d3469fee22d4dc821fbd525a362a87c8674e))
+
 ## v0.1.4 (2024-02-24)
 
 ### Fix
