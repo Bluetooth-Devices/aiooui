@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2 (2024-02-24)
+
+### Fix
+
+- Make failure to update oui data non-fatal (#4) ([`a7bb60d`](https://github.com/Bluetooth-Devices/aiooui/commit/a7bb60deb0980a9bfda3debda499393c89601f50))
+
 ## v0.1.1 (2024-02-24)
 
 ### Fix
