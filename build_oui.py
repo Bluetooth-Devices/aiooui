@@ -13,6 +13,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
     setuptools.setup(
         **setup_kwargs,
+        long_description_content_type="text/markdown",
         script_args=["bdist_wheel"],
         options={
             "bdist_wheel": {"plat_name": "any"},
