@@ -5,11 +5,22 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
-import requests  # type: ignore
-
 
 def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
+    for _ in range(3):
+        try:
+            _regenerate_ouis()
+            return
+        except Exception as e:
+            print(f"Failed to regenerate OUI data: {e}")
+
+    print("Using existing data.")
+
+
+def _regenerate_ouis() -> None:
+    import requests  # type: ignore
+
     resp = requests.get("https://standards-oui.ieee.org/oui.txt", timeout=20)
     resp.raise_for_status()
     oui_bytes = resp.content
