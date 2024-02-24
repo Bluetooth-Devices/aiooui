@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 (2024-02-24)
+
+### Fix
+
+- Raise timeout to get oui data in build (#3) ([`19877f5`](https://github.com/Bluetooth-Devices/aiooui/commit/19877f59395385d602760acb0f1669961bacbaa6))
+
 ## v0.1.0 (2024-02-24)
 
 ### Feature
