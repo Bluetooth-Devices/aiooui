@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.3 (2024-02-24)
+
+### Fix
+
+- Build a none wheel as well (#5) ([`0c4b4ab`](https://github.com/Bluetooth-Devices/aiooui/commit/0c4b4ab1e1872a3e84387bf6cf395339b0a5eaa0))
+
 ## v0.1.2 (2024-02-24)
 
 ### Fix
