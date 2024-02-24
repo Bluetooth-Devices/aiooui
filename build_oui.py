@@ -5,9 +5,20 @@ from __future__ import annotations
 import pathlib
 from typing import Any
 
+import setuptools
+
 
 def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
+    setuptools.setup(
+        **setup_kwargs,
+        script_args=["bdist_wheel"],
+        options={
+            "bdist_wheel": {"plat_name": "any"},
+            "egg_info": {"egg_base": "./build/"},
+        },
+    )
+
     for _ in range(3):
         try:
             _regenerate_ouis()
