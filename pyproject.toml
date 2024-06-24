@@ -3,7 +3,6 @@ name = "aiooui"
 version = "0.1.5"
 description = "Async OUI lookups"
 authors = ["J. Nick Koston <nick@koston.org>"]
-license = "MIT"
 readme = "README.md"
 repository = "https://github.com/bluetooth-devices/aiooui"
 classifiers = [
@@ -12,6 +11,7 @@ classifiers = [
     "Natural Language :: English",
     "Operating System :: OS Independent",
     "Topic :: Software Development :: Libraries",
+    "License :: OSI Approved :: MIT License",
 ]
 packages = [
     { include = "aiooui", from = "src" },
