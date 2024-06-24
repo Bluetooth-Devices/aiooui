@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aiooui"
-version = "0.1.5"
+version = "0.1.6"
 description = "Async OUI lookups"
 authors = ["J. Nick Koston <nick@koston.org>"]
 readme = "README.md"

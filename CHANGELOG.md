@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.6 (2024-06-24)
+
+### Fix
+
+- Fix license classifier (#8) ([`ed002d4`](https://github.com/Bluetooth-Devices/aiooui/commit/ed002d4865c39ac7f62d6d550792f9b53fbb57e5))
+
 ## v0.1.5 (2024-02-24)
 
 ### Fix
