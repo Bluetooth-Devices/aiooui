@@ -13,6 +13,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
     setup_kwargs["maintainer"] = "Bluetooth Devices"
     setup_kwargs["maintainer_email"] = "bluetooth@koston.org"
+    setup_kwargs["license"] = "MIT"
     setuptools.setup(
         **setup_kwargs,
         long_description_content_type="text/markdown",
