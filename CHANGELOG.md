@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.7 (2024-10-25)
+
+### Fix
+
+- Include license in project metadata (#23) ([`cf53993`](https://github.com/Bluetooth-Devices/aiooui/commit/cf53993ea2cf8201ab1fee7ca1b79858b6014640))
+
 ## v0.1.6 (2024-06-24)
 
 ### Fix
