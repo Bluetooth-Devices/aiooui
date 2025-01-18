@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.8 (2025-01-18)
+
+### Fix
+
+- Improve retry when oui data is not available during build (#33) ([`087b021`](https://github.com/Bluetooth-Devices/aiooui/commit/087b021de98831abb39d45537c20fcf134651c0a))
+
 ## v0.1.7 (2024-10-25)
 
 ### Fix
