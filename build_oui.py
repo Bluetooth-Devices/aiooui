@@ -52,7 +52,7 @@ def _regenerate_ouis() -> None:
     file = pathlib.Path(__file__)
     target_file = file.parent.joinpath("src").joinpath("aiooui").joinpath("oui.data")
     with open(target_file, "wb") as f:
-        f.write(b"\n".join(b"=".join((o, v)) for o, v in oui_to_vendor.items()))
+        f.write(b"\n".join(b"=".join((o, v)) for o, v in sorted(oui_to_vendor.items())))
 
 
 if __name__ == "__main__":
