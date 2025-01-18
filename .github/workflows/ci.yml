@@ -10,9 +10,6 @@ concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
-env:
-  AIOOUI_REQUIRE_REGENERATE: "true"
-
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -54,8 +51,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - uses: snok/install-poetry@v1.3.4
-      - name: Install Dependencies
+      - name: Install Dependencies (not main branch)
         run: poetry install -vvv
+        if: github.ref_name != 'main'
+        env:
+          AIOOUI_SKIP_REGENERATE: "true"
+        shell: bash
+      - name: Install Dependencies (main branch)
+        run: poetry install -vvv
+        if: github.ref_name == 'main'
+        env:
+          AIOOUI_REQUIRE_REGENERATE: "true"
         shell: bash
       - name: Test with Pytest
         run: poetry run pytest --cov-report=xml
