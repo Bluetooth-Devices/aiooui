@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import time
 from typing import Any
 
 import setuptools
@@ -28,6 +29,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
             _regenerate_ouis()
             return
         except Exception as e:
+            time.sleep(5)
             print(f"Failed to regenerate OUI data: {e}")
 
     if os.environ.get("AIOOUI_REQUIRE_REGENERATE"):
