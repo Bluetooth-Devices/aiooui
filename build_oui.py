@@ -24,6 +24,9 @@ def build(setup_kwargs: dict[str, Any]) -> None:
             "bdist_wheel": {"plat_name": "any"},
         },
     )
+    if os.environ.get("AIOOUI_SKIP_REGENERATE"):
+        print("Skipping OUI data regeneration.")
+        return
 
     for attempt in range(6):
         try:
