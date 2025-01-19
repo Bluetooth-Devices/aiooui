@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9 (2025-01-19)
+
+### Fix
+
+- Ensure oui data can be loaded in windows (#38) ([`91c29c7`](https://github.com/Bluetooth-Devices/aiooui/commit/91c29c7fdd432c0e2210c41a2d3f114c3b8b022b))
+
 ## v0.1.8 (2025-01-18)
 
 ### Fix
