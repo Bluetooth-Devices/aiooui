@@ -43,7 +43,7 @@ class OUIManager:
 
     def _load_oui_data(self) -> dict[str, str]:
         """Load the OUI data."""
-        with open(_OUI_DATA_FILE) as f:
+        with open(_OUI_DATA_FILE, encoding="utf-8", errors="replace") as f:
             oui_to_vendor: dict[str, str] = {}
             for line in f.read().splitlines():
                 oui, _, vendor = line.partition("=")
