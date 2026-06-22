@@ -92,7 +92,7 @@ jobs:
           BRANCH: ${{ github.head_ref || github.ref_name }}
         run: git switch -C "$BRANCH"
       - name: Test release
-        uses: python-semantic-release/python-semantic-release@v9.1.0
+        uses: python-semantic-release/python-semantic-release@v9.21.0
         with:
           root_options: --noop
 
@@ -124,7 +124,7 @@ jobs:
 
       # On main branch: actual PSR + upload to PyPI & GitHub
       - name: Release
-        uses: python-semantic-release/python-semantic-release@v9.1.0
+        uses: python-semantic-release/python-semantic-release@v9.21.0
         id: release
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
