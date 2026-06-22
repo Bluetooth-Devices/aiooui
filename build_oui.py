@@ -47,7 +47,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
 
 
 def _regenerate_ouis_requests() -> None:
-    import requests  # type: ignore
+    import requests
 
     resp = requests.get("https://standards-oui.ieee.org/oui.txt", timeout=20)
     resp.raise_for_status()
