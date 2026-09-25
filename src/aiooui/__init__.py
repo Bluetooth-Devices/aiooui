@@ -73,8 +73,6 @@ def _bisect(data: bytes, key: bytes) -> str | None:
     lo, hi = 0, len(data)
     while lo < hi:
         start = data.rfind(_NL, 0, (lo + hi) // 2) + 1
-        if start < lo:
-            start = lo
         end = data.find(_NL, start)
         if end < 0:
             end = len(data)
