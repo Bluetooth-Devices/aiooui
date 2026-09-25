@@ -55,26 +55,31 @@ aiooui.get_vendor("00:00:00:11:22:33")  # "XEROX CORPORATION"
 
 ## How lookups work
 
-The OUI table (`src/aiooui/oui.data`, ~37k entries, ~1.1 MB) is not loaded into a
+The OUI table (`src/aiooui/oui.data`, ~40k entries, ~770 KB) is not loaded into a
 dict. `async_load()` memory-maps the file read-only in an executor, and
-`get_vendor()` binary-searches the mapping. The process keeps almost no private
-memory for the table (~84 KiB, against ~5.6 MB for a dict). `async_load()` touches
-every page once, in the executor, so lookups on the event loop never wait on disk.
-Those pages are clean, shared page cache that the kernel can reclaim under memory
-pressure. If `mmap` is unavailable, the file is read into `bytes` (~1.1 MB) and
-searched the same way.
+`get_vendor()` binary-searches the key array in place with `bisect`, so the search
+itself runs in C. The process keeps almost no private memory for the table
+(against ~5.6 MB for a dict). `async_load()` touches every page once, in the
+executor, so lookups on the event loop never wait on disk. Those pages are clean,
+shared page cache that the kernel can reclaim under memory pressure. If `mmap` is
+unavailable, the file is read into `bytes` and searched the same way.
 
-### Data file format — must stay sorted
+### Data file format
 
-The binary search depends on `oui.data` being:
+`oui.data` is a small binary table, all integers little-endian `uint32`:
 
-- one `OUI=VENDOR` entry per line, separated by `\n`;
-- OUI = exactly 6 uppercase hexadecimal digits, each appearing once;
-- **sorted by OUI**.
+| section | contents                                                     |
+| ------- | ------------------------------------------------------------ |
+| magic   | `OUI1`                                                       |
+| count   | number of entries, `n`                                       |
+| keys    | `n` OUIs as 24-bit integers, **sorted ascending, unique**    |
+| offsets | `n` byte offsets of each entry's vendor name inside the blob |
+| blob    | UTF-8 vendor names, each terminated by `\n`, deduplicated    |
 
-Regenerate it only with `build_oui.py`, which validates and sorts the entries.
-`tests/test_init.py::test_data_file_is_sorted` fails if the file is out of order
-or malformed. A file that is unsorted would make lookups silently return `None`.
+Regenerate it only with `build_oui.py`, which validates, sorts and packs the
+entries. `tests/test_init.py::test_data_file_is_valid` fails if the file is out of
+order or malformed. An unsorted key array would make lookups silently return
+`None`.
 
 ## Contributors ✨
 

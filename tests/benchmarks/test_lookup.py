@@ -2,25 +2,23 @@
 
 from __future__ import annotations
 
-import mmap
 import random
+import struct
 from collections.abc import Iterator
 
 import pytest
 from pytest_codspeed import BenchmarkFixture
 
 import aiooui
-from aiooui import OUIManager, _bisect
+from aiooui import OUIManager
 
 
 @pytest.fixture(scope="module")
 def manager() -> Iterator[OUIManager]:
     """A dedicated, loaded OUI manager (keeps the module-level one untouched)."""
     mgr = OUIManager()
-    mgr._oui_to_vendor = mgr._load_oui_data()
+    mgr._attach(mgr._load_oui_data())
     yield mgr
-    if isinstance(mgr._oui_to_vendor, mmap.mmap):
-        mgr._oui_to_vendor.close()
 
 
 @pytest.fixture
@@ -31,15 +29,18 @@ def loaded(monkeypatch: pytest.MonkeyPatch, manager: OUIManager) -> OUIManager:
 
 
 @pytest.fixture(scope="module")
-def raw_bytes() -> bytes:
-    """The OUI data file read fully into memory (mmap fallback path)."""
-    return aiooui._OUI_DATA_FILE.read_bytes()
+def bytes_manager() -> OUIManager:
+    """A manager over the data file read fully into memory (mmap fallback path)."""
+    mgr = OUIManager()
+    mgr._attach(aiooui._OUI_DATA_FILE.read_bytes())
+    return mgr
 
 
 def _sample_macs(count: int) -> list[str]:
     """Reproducible mix of known and unknown MACs, in mixed case."""
     raw = aiooui._OUI_DATA_FILE.read_bytes()
-    known = [line[:6].decode() for line in raw.split(b"\n")]
+    _, n = struct.unpack_from("<4sI", raw)
+    known = [f"{key:06X}" for key in struct.unpack_from(f"<{n}I", raw, 8)]
     rng = random.Random(1234)  # noqa: S311 - reproducible benchmark data
     macs = []
     for i in range(count):
@@ -80,32 +81,35 @@ def test_get_vendor_1000_mixed(benchmark: BenchmarkFixture, loaded: OUIManager) 
 
 
 def test_bisect_mmap(benchmark: BenchmarkFixture, manager: OUIManager) -> None:
-    """Raw binary search over the memory-mapped data."""
-    data = manager._oui_to_vendor
-    keys = [m.replace(":", "")[:6].upper().encode() for m in MACS_1000[:200]]
+    """200 lookups against the memory-mapped table."""
+    macs = MACS_1000[:200]
+    get_vendor = manager.get_vendor
 
     @benchmark
     def _run() -> None:
-        for key in keys:
-            _bisect(data, key)
+        for mac in macs:
+            get_vendor(mac)
 
 
-def test_bisect_bytes(benchmark: BenchmarkFixture, raw_bytes: bytes) -> None:
-    """Raw binary search over an in-memory bytes copy (mmap fallback)."""
-    keys = [m.replace(":", "")[:6].upper().encode() for m in MACS_1000[:200]]
+def test_bisect_bytes(benchmark: BenchmarkFixture, bytes_manager: OUIManager) -> None:
+    """200 lookups against an in-memory bytes copy (mmap fallback)."""
+    macs = MACS_1000[:200]
+    get_vendor = bytes_manager.get_vendor
 
     @benchmark
     def _run() -> None:
-        for key in keys:
-            _bisect(raw_bytes, key)
+        for mac in macs:
+            get_vendor(mac)
 
 
 def test_load_oui_data(benchmark: BenchmarkFixture) -> None:
-    """Memory-map and pre-fault the OUI data file."""
-    mgr = OUIManager()
+    """Memory-map and pre-fault the OUI data file, then attach the arrays."""
 
     @benchmark
     def _run() -> None:
+        mgr = OUIManager()
         data = mgr._load_oui_data()
-        if isinstance(data, mmap.mmap):
+        mgr._attach(data)
+        mgr._keys = mgr._offsets = None  # type: ignore[assignment]
+        if hasattr(data, "close"):
             data.close()
