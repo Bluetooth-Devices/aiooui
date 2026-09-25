@@ -47,6 +47,7 @@ async def test_matches_full_table() -> None:
 
 def test_bytes_fallback_when_mmap_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """If mmap is unavailable the data is read into bytes and lookups still work."""
+
     def _fail(*args, **kwargs):
         raise OSError("no mmap")
 
