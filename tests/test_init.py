@@ -1,10 +1,17 @@
+import pathlib
+import random
+import re
+import sys
+import types
+
 import pytest
 
+import aiooui
 from aiooui import async_load, get_vendor, is_loaded
 
 
 @pytest.mark.asyncio
-async def test_get_without_load():
+async def test_get_without_load() -> None:
     """Test getting a vendor without loading."""
     assert is_loaded() is False
     with pytest.raises(RuntimeError):
@@ -12,7 +19,7 @@ async def test_get_without_load():
 
 
 @pytest.mark.asyncio
-async def test_get_vendor():
+async def test_get_vendor() -> None:
     """Test getting a vendor."""
     assert is_loaded() is False
     await async_load()
@@ -23,7 +30,7 @@ async def test_get_vendor():
 
 
 @pytest.mark.asyncio
-async def test_matches_full_table():
+async def test_matches_full_table() -> None:
     """Every OUI in the data file resolves to the same vendor a dict lookup gives."""
     await async_load()
     table = _reference_table()
@@ -37,10 +44,8 @@ async def test_matches_full_table():
     assert get_vendor(last + "000000") == table[last]
 
 
-def test_loaded_data_is_raw_bytes():
+def test_loaded_data_is_raw_bytes() -> None:
     """The table is kept as the raw file bytes, not expanded into a dict."""
-    import aiooui
-
     data = aiooui.OUIManager()._load_oui_data()
     assert isinstance(data, bytes)
     assert aiooui._bisect(data, b"000000") == "XEROX CORPORATION"
@@ -49,10 +54,6 @@ def test_loaded_data_is_raw_bytes():
 
 def _reference_table() -> dict[str, str]:
     """Parse oui.data the way the old dict implementation did."""
-    import pathlib
-
-    import aiooui
-
     raw = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data").read_bytes()
     table = {}
     for line in raw.decode("utf-8", "replace").splitlines():
@@ -61,13 +62,8 @@ def _reference_table() -> dict[str, str]:
     return table
 
 
-def test_data_file_is_sorted():
+def test_data_file_is_sorted() -> None:
     """The binary search needs oui.data sorted, with unique 6-hex-digit keys."""
-    import pathlib
-    import re
-
-    import aiooui
-
     raw = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data").read_bytes()
     keys = [line.partition(b"=")[0] for line in raw.rstrip(b"\n").split(b"\n")]
     assert all(re.fullmatch(rb"[0-9A-F]{6}", k) for k in keys), "malformed OUI key"
@@ -76,17 +72,14 @@ def test_data_file_is_sorted():
 
 
 @pytest.mark.asyncio
-async def test_random_macs_match_reference():
+async def test_random_macs_match_reference() -> None:
     """Random MACs (hits and misses, mixed case) agree with a plain dict lookup."""
-    import random
-
     await async_load()
     table = _reference_table()
     rng = random.Random(20260924)  # noqa: S311 - reproducible test data
     known = list(table)
     hits = misses = 0
     for i in range(20000):
-        # half from known prefixes, half fully random (mostly misses between entries)
         oui = rng.choice(known) if i % 2 else f"{rng.randrange(1 << 24):06X}"
         tail = [f"{rng.randrange(256):02x}" for _ in range(3)]
         mac = ":".join([oui[0:2], oui[2:4], oui[4:6], *tail])
@@ -102,10 +95,8 @@ async def test_random_macs_match_reference():
     assert misses > 1000
 
 
-def test_bisect_edge_cases():
+def test_bisect_edge_cases() -> None:
     """Small synthetic tables: single entry, ends, "=" in vendor, CRLF, misses."""
-    import aiooui
-
     one = b"000001=ONE"
     assert aiooui._bisect(one, b"000001") == "ONE"
     assert aiooui._bisect(one, b"000000") is None
@@ -118,11 +109,8 @@ def test_bisect_edge_cases():
         assert aiooui._bisect(data, miss) is None
 
 
-def _import_build_oui(monkeypatch):
+def _import_build_oui(monkeypatch: pytest.MonkeyPatch) -> None:
     """Import build_oui, stubbing setuptools when it is not installed."""
-    import sys
-    import types
-
     try:
         import setuptools  # noqa: F401
     except ImportError:
@@ -133,7 +121,7 @@ def _import_build_oui(monkeypatch):
     return build_oui
 
 
-def test_build_rejects_malformed_oui(monkeypatch):
+def test_build_rejects_malformed_oui(monkeypatch: pytest.MonkeyPatch) -> None:
     """A malformed IEEE entry raises before oui.data is written."""
     build_oui = _import_build_oui(monkeypatch)
 
@@ -141,7 +129,7 @@ def test_build_rejects_malformed_oui(monkeypatch):
         build_oui._update_from_oui_content(b"00-00-0X   (base 16)\t\tBROKEN\n")
 
 
-def test_build_does_not_retry_malformed_data(monkeypatch):
+def test_build_does_not_retry_malformed_data(monkeypatch: pytest.MonkeyPatch) -> None:
     """Validation errors are not retried or swallowed by the download loop."""
     build_oui = _import_build_oui(monkeypatch)
 
