@@ -115,7 +115,7 @@ def test_bisect_edge_cases() -> None:
         assert aiooui._bisect(data, miss) is None
 
 
-def _import_build_oui(monkeypatch: pytest.MonkeyPatch) -> None:
+def _import_build_oui(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
     """Import build_oui, stubbing setuptools when it is not installed."""
     try:
         import setuptools  # noqa: F401
