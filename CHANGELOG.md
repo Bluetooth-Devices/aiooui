@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.11 (2026-09-25)
+
+### Bug fixes
+
+- Build a pure wheel and regenerate the oui data before packaging (#92) ([`c9cb333`](https://github.com/Bluetooth-Devices/aiooui/commit/c9cb333604d8435e28c48e4b01dd71e10030b5a3))
+
 ## v0.1.10 (2026-09-25)
 
 ### Performance improvements
