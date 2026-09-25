@@ -7,6 +7,7 @@
   <a href="https://codecov.io/gh/bluetooth-devices/aiooui">
     <img src="https://img.shields.io/codecov/c/github/bluetooth-devices/aiooui.svg?logo=codecov&logoColor=fff&style=flat-square" alt="Test coverage percentage">
   </a>
+  <a href="https://app.codspeed.io/Bluetooth-Devices/aiooui?utm_source=badge"><img src="https://img.shields.io/endpoint?url=https://codspeed.io/badge.json" alt="CodSpeed"/></a>
 </p>
 <p align="center">
   <a href="https://python-poetry.org/">
