@@ -25,18 +25,8 @@ async def test_get_vendor():
 @pytest.mark.asyncio
 async def test_matches_full_table():
     """Every OUI in the data file resolves to the same vendor a dict lookup gives."""
-    import pathlib
-
-    import aiooui
-
     await async_load()
-    raw = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data").read_bytes()
-    table = {}
-    for line in raw.splitlines():
-        if not line:
-            continue
-        raw_oui, _, raw_vendor = line.partition(b"=")
-        table[raw_oui.decode()] = raw_vendor.decode("utf-8", "replace")
+    table = _reference_table()
     for oui, vendor in table.items():
         mac = ":".join((oui[0:2], oui[2:4], oui[4:6], "11", "22", "33"))
         assert get_vendor(mac) == vendor
@@ -126,3 +116,30 @@ def test_bisect_edge_cases():
     assert aiooui._bisect(data, b"0000FF") == "LAST"
     for miss in (b"000000", b"000002", b"000100", b"FFFFFF"):
         assert aiooui._bisect(data, miss) is None
+
+
+def test_build_rejects_malformed_oui():
+    """A malformed IEEE entry raises before oui.data is written."""
+    import build_oui
+
+    with pytest.raises(ValueError, match="Unexpected OUI"):
+        build_oui._update_from_oui_content(b"00-00-0X   (base 16)\t\tBROKEN\n")
+
+
+def test_build_does_not_retry_malformed_data(monkeypatch):
+    """Validation errors are not retried or swallowed by the download loop."""
+    import build_oui
+
+    calls = []
+
+    async def fail_aiohttp():
+        calls.append("aiohttp")
+        raise ValueError("Unexpected OUI b'00000X'")
+
+    monkeypatch.setattr(build_oui.setuptools, "setup", lambda **kwargs: None)
+    monkeypatch.setattr(build_oui, "_regenerate_ouis_aiohttp", fail_aiohttp)
+    monkeypatch.setattr(build_oui.time, "sleep", lambda s: calls.append("sleep"))
+    monkeypatch.delenv("AIOOUI_SKIP_REGENERATE", raising=False)
+    with pytest.raises(ValueError):
+        build_oui.build({})
+    assert calls == ["aiohttp"]

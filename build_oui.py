@@ -36,6 +36,10 @@ def build(setup_kwargs: dict[str, Any]) -> None:
                 _regenerate_ouis_requests()
             print(f"Regenerated OUI data on attempt {attempt + 1}.")
             return
+        except ValueError:
+            # Malformed IEEE data is deterministic: fail at once instead of retrying and
+            # silently keeping the existing file.
+            raise
         except Exception as e:
             time.sleep(5)
             print(f"Failed to regenerate OUI data: {e}")
@@ -76,7 +80,7 @@ def _update_from_oui_content(oui_bytes: bytes) -> None:
             oui = oui.strip().upper()
             if len(oui) != 6 or oui.strip(b"0123456789ABCDEF"):
                 raise ValueError(f"Unexpected OUI {oui!r}")
-            oui_to_vendor[oui] = vendor.strip().replace(b"\n", b" ")
+            oui_to_vendor[oui] = vendor.strip()
     file = pathlib.Path(__file__)
     target_file = file.parent.joinpath("src").joinpath("aiooui").joinpath("oui.data")
     with open(target_file, "wb") as f:
