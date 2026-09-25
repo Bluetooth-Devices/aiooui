@@ -36,6 +36,10 @@ def build(setup_kwargs: dict[str, Any]) -> None:
                 _regenerate_ouis_requests()
             print(f"Regenerated OUI data on attempt {attempt + 1}.")
             return
+        except ValueError:
+            # Malformed IEEE data is deterministic: fail at once instead of retrying and
+            # silently keeping the existing file.
+            raise
         except Exception as e:
             time.sleep(5)
             print(f"Failed to regenerate OUI data: {e}")
@@ -64,11 +68,19 @@ async def _regenerate_ouis_aiohttp() -> None:
 
 
 def _update_from_oui_content(oui_bytes: bytes) -> None:
+    # oui.data format, relied on by the binary search in aiooui/__init__.py:
+    #   one "OUI=VENDOR" entry per line, "\n"-separated, OUI = exactly 6 uppercase
+    #   hex digits, unique, and the file MUST be sorted by OUI (byte order).
+    # An unsorted or malformed file makes lookups silently miss entries, so it is
+    # validated here and again by tests/test_init.py::test_data_file_is_sorted.
     oui_to_vendor = {}
     for line in oui_bytes.splitlines():
         if b"(base 16)" in line:
             oui, _, vendor = line.partition(b"(base 16)")
-            oui_to_vendor[oui.strip()] = vendor.strip()
+            oui = oui.strip().upper()
+            if len(oui) != 6 or oui.strip(b"0123456789ABCDEF"):
+                raise ValueError(f"Unexpected OUI {oui!r}")
+            oui_to_vendor[oui] = vendor.strip()
     file = pathlib.Path(__file__)
     target_file = file.parent.joinpath("src").joinpath("aiooui").joinpath("oui.data")
     with open(target_file, "wb") as f:

@@ -1,29 +1,35 @@
+"""Async OUI (MAC vendor prefix) lookups."""
+
 from __future__ import annotations
 
 __version__ = "0.1.9"
 
 import asyncio
+import mmap
 import pathlib
+
+_NL = b"\n"
+_KEY_LEN = 6
 
 _OUI_DATA_FILE = pathlib.Path(__file__).parent.joinpath("oui.data")
 
 
 class OUIManager:
-    """Manages the OUI data."""
+    """OUI data manager."""
 
     def __init__(self) -> None:
-        """Initialize the OUIManager."""
-        self._oui_to_vendor: dict[str, str] = {}
+        self._oui_to_vendor: bytes | mmap.mmap = b""
         self._load_future: asyncio.Future[None] | None = None
 
     def get_vendor(self, mac: str) -> str | None:
-        """Get the vendor for a MAC address."""
+        """Return the vendor name for *mac*, or ``None``."""
         if not self._oui_to_vendor:
             raise RuntimeError("OUI data not loaded, call async_load first")
-        return self._oui_to_vendor.get(mac.replace(":", "")[:6].upper())
+        key = mac.replace(":", "")[:_KEY_LEN].upper().encode()
+        return _bisect(self._oui_to_vendor, key)
 
     async def async_load(self) -> None:
-        """Load the OUI data."""
+        """Load OUI data from disk (idempotent)."""
         if self._oui_to_vendor:
             return
         if self._load_future:
@@ -41,32 +47,52 @@ class OUIManager:
         finally:
             self._load_future = None
 
-    def _load_oui_data(self) -> dict[str, str]:
-        """Load the OUI data."""
-        with open(_OUI_DATA_FILE, encoding="utf-8", errors="replace") as f:
-            oui_to_vendor: dict[str, str] = {}
-            for line in f.read().splitlines():
-                oui, _, vendor = line.partition("=")
-                oui_to_vendor[oui] = vendor
+    def _load_oui_data(self) -> bytes | mmap.mmap:
+        """Memory-map oui.data read-only, falling back to bytes if mmap fails."""
+        with _OUI_DATA_FILE.open("rb") as f:
+            try:
+                data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            except (OSError, ValueError):
+                return f.read()
+        for offset in range(0, len(data), mmap.PAGESIZE):
+            data[offset]
+        return data
 
-        return oui_to_vendor
+
+def _bisect(data: bytes | mmap.mmap, key: bytes) -> str | None:
+    """Binary-search sorted OUI=VENDOR lines for key."""
+    lo, hi = 0, len(data)
+    while lo < hi:
+        start = data.rfind(_NL, 0, (lo + hi) // 2) + 1
+        end = data.find(_NL, start)
+        if end < 0:
+            end = len(data)
+        line_key = data[start : start + _KEY_LEN]
+        if line_key == key:
+            vendor = data[start + _KEY_LEN + 1 : end].rstrip(b"\r")
+            return vendor.decode("utf-8", "replace")
+        if line_key < key:
+            lo = end + 1
+        else:
+            hi = start
+    return None
 
 
 _OUI_MANAGER = OUIManager()
 
 
 def is_loaded() -> bool:
-    """Return if the OUI data is loaded."""
+    """Return whether OUI data has been loaded."""
     return bool(_OUI_MANAGER._oui_to_vendor)
 
 
 def get_vendor(mac: str) -> str | None:
-    """Get the vendor for a MAC address."""
+    """Return the vendor name for *mac*, or ``None``."""
     return _OUI_MANAGER.get_vendor(mac)
 
 
 async def async_load() -> None:
-    """Load the OUI data."""
+    """Load OUI data from disk (idempotent)."""
     await _OUI_MANAGER.async_load()
 
 
