@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import pathlib
+import struct
 import time
 from typing import Any
 
@@ -73,23 +74,56 @@ async def _regenerate_ouis_aiohttp() -> None:
 
 
 def _update_from_oui_content(oui_bytes: bytes) -> None:
-    # oui.data format, relied on by the binary search in aiooui/__init__.py:
-    #   one "OUI=VENDOR" entry per line, "\n"-separated, OUI = exactly 6 uppercase
-    #   hex digits, unique, and the file MUST be sorted by OUI (byte order).
-    # An unsorted or malformed file makes lookups silently miss entries, so it is
-    # validated here and again by tests/test_init.py::test_data_file_is_sorted.
-    oui_to_vendor = {}
+    oui_to_vendor: dict[int, bytes] = {}
     for line in oui_bytes.splitlines():
         if b"(base 16)" in line:
             oui, _, vendor = line.partition(b"(base 16)")
             oui = oui.strip().upper()
             if len(oui) != 6 or oui.strip(b"0123456789ABCDEF"):
                 raise ValueError(f"Unexpected OUI {oui!r}")
-            oui_to_vendor[oui] = vendor.strip()
+            oui_to_vendor[int(oui, 16)] = vendor.strip()
     file = pathlib.Path(__file__)
     target_file = file.parent.joinpath("src").joinpath("aiooui").joinpath("oui.data")
-    with open(target_file, "wb") as f:
-        f.write(b"\n".join(b"=".join((o, v)) for o, v in sorted(oui_to_vendor.items())))
+    target_file.write_bytes(_pack(oui_to_vendor))
+
+
+def _pack(oui_to_vendor: dict[int, bytes]) -> bytes:
+    """
+    Serialize the table in the layout aiooui/__init__.py searches.
+
+    All integers are little-endian uint32:
+      magic  b"OUI1"
+      count  number of entries, n
+      keys   n * uint32, the OUI as a 24-bit integer, sorted ascending, unique
+      offs   n * uint32, byte offset of the entry's vendor name inside the blob
+      blob   utf-8 vendor names, each newline terminated, deduplicated
+
+    Sorted keys are what make the binary search work, so they are produced here
+    and checked again by tests/test_init.py::test_data_file_is_valid.
+    """
+    blob = bytearray()
+    blob_offsets: dict[bytes, int] = {}
+    keys: list[int] = []
+    offsets: list[int] = []
+    for key in sorted(oui_to_vendor):
+        vendor = oui_to_vendor[key]
+        if b"\n" in vendor or not vendor:
+            raise ValueError(f"Unexpected vendor {vendor!r} for OUI {key:06X}")
+        vendor.decode()
+        if vendor not in blob_offsets:
+            blob_offsets[vendor] = len(blob)
+            blob += vendor + b"\n"
+        keys.append(key)
+        offsets.append(blob_offsets[vendor])
+    count = len(keys)
+    return b"".join(
+        (
+            struct.pack("<4sI", b"OUI1", count),
+            struct.pack(f"<{count}I", *keys),
+            struct.pack(f"<{count}I", *offsets),
+            blob,
+        )
+    )
 
 
 if __name__ == "__main__":

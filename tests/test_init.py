@@ -1,7 +1,7 @@
 import mmap
 import pathlib
 import random
-import re
+import struct
 import sys
 import types
 
@@ -9,6 +9,8 @@ import pytest
 
 import aiooui
 from aiooui import async_load, get_vendor, is_loaded
+
+_DATA_FILE = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data")
 
 
 @pytest.mark.asyncio
@@ -32,7 +34,7 @@ async def test_get_vendor() -> None:
 
 @pytest.mark.asyncio
 async def test_matches_full_table() -> None:
-    """Every OUI in the data file resolves to the same vendor a dict lookup gives."""
+    """Every OUI in the data file resolves to the vendor the reference decoder gives."""
     await async_load()
     table = _reference_table()
     for oui, vendor in table.items():
@@ -45,6 +47,18 @@ async def test_matches_full_table() -> None:
     assert get_vendor(last + "000000") == table[last]
 
 
+@pytest.mark.asyncio
+async def test_malformed_macs() -> None:
+    """Short, non-hex or oddly separated MACs return None instead of raising."""
+    await async_load()
+    assert get_vendor("") is None
+    assert get_vendor("00:00") is None
+    assert get_vendor("00-00-00-00-00-00") is None
+    assert get_vendor("zz:00:00:00:00:00") is None
+    assert get_vendor("000000") == "XEROX CORPORATION"
+    assert get_vendor("000000112233") == "XEROX CORPORATION"
+
+
 def test_bytes_fallback_when_mmap_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """If mmap is unavailable the data is read into bytes and lookups still work."""
 
@@ -52,34 +66,75 @@ def test_bytes_fallback_when_mmap_fails(monkeypatch: pytest.MonkeyPatch) -> None
         raise OSError("no mmap")
 
     monkeypatch.setattr(mmap, "mmap", _fail)
-    data = aiooui.OUIManager()._load_oui_data()
+    manager = aiooui.OUIManager()
+    data = manager._load_oui_data()
     assert isinstance(data, bytes)
-    assert aiooui._bisect(data, b"000000") == "XEROX CORPORATION"
-    assert aiooui._bisect(data, b"FFFFFF") is None
+    manager._attach(data)
+    assert manager.get_vendor("00:00:00:00:00:00") == "XEROX CORPORATION"
+    assert manager.get_vendor("FF:FF:FF:00:00:00") is None
+
+
+def test_big_endian_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """On big-endian hosts the arrays are unpacked instead of viewed in place."""
+    monkeypatch.setattr(sys, "byteorder", "big")
+    manager = aiooui.OUIManager()
+    manager._attach(_DATA_FILE.read_bytes())
+    assert isinstance(manager._keys, tuple)
+    assert manager.get_vendor("00:00:00:00:00:00") == "XEROX CORPORATION"
+    assert manager.get_vendor("FF:FF:FF:00:00:00") is None
+
+
+def test_invalid_table_rejected() -> None:
+    """A file with the wrong magic or a truncated header is refused."""
+    manager = aiooui.OUIManager()
+    with pytest.raises(RuntimeError):
+        manager._attach(b"OUI0" + struct.pack("<I", 0))
+    with pytest.raises(RuntimeError):
+        manager._attach(struct.pack("<4sI", b"OUI1", 1000))
 
 
 def _reference_table() -> dict[str, str]:
-    """Parse oui.data the way the old dict implementation did."""
-    raw = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data").read_bytes()
+    """Decode oui.data independently of the runtime search."""
+    raw = _DATA_FILE.read_bytes()
+    magic, count = struct.unpack_from("<4sI", raw)
+    assert magic == b"OUI1"
+    keys = struct.unpack_from(f"<{count}I", raw, 8)
+    offsets = struct.unpack_from(f"<{count}I", raw, 8 + 4 * count)
+    blob = raw[8 + 8 * count :]
     table = {}
-    for line in raw.decode("utf-8", "replace").splitlines():
-        oui, _, vendor = line.partition("=")
-        table[oui] = vendor
+    for key, offset in zip(keys, offsets):
+        end = blob.index(b"\n", offset)
+        table[f"{key:06X}"] = blob[offset:end].decode()
     return table
 
 
-def test_data_file_is_sorted() -> None:
-    """The binary search needs oui.data sorted, with unique 6-hex-digit keys."""
-    raw = pathlib.Path(aiooui.__file__).parent.joinpath("oui.data").read_bytes()
-    keys = [line.partition(b"=")[0] for line in raw.rstrip(b"\n").split(b"\n")]
-    assert all(re.fullmatch(rb"[0-9A-F]{6}", k) for k in keys), "malformed OUI key"
-    assert keys == sorted(keys), "oui.data must be sorted by OUI (see build_oui.py)"
+def test_data_file_is_valid() -> None:
+    """The binary search needs sorted, unique 24-bit keys and valid vendor offsets."""
+    raw = _DATA_FILE.read_bytes()
+    magic, count = struct.unpack_from("<4sI", raw)
+    assert magic == b"OUI1"
+    keys = struct.unpack_from(f"<{count}I", raw, 8)
+    offsets = struct.unpack_from(f"<{count}I", raw, 8 + 4 * count)
+    blob = raw[8 + 8 * count :]
+    assert count > 30000
+    assert list(keys) == sorted(
+        keys
+    ), "oui.data must be sorted by OUI (see build_oui.py)"
     assert len(keys) == len(set(keys)), "duplicate OUI in oui.data"
+    assert all(0 <= k < 1 << 24 for k in keys), "OUI keys must be 24-bit"
+    assert blob.endswith(b"\n")
+    line_starts = {0}
+    pos = 0
+    while (nl := blob.find(b"\n", pos)) != -1:
+        line_starts.add(nl + 1)
+        pos = nl + 1
+    assert all(o in line_starts and o < len(blob) for o in offsets)
+    blob.decode()
 
 
 @pytest.mark.asyncio
 async def test_random_macs_match_reference() -> None:
-    """Random MACs (hits and misses, mixed case) agree with a plain dict lookup."""
+    """Random MACs (hits and misses, mixed case) agree with the reference decoder."""
     await async_load()
     table = _reference_table()
     rng = random.Random(20260924)  # noqa: S311 - reproducible test data
@@ -101,18 +156,36 @@ async def test_random_macs_match_reference() -> None:
     assert misses > 1000
 
 
-def test_bisect_edge_cases() -> None:
-    """Small synthetic tables: single entry, ends, "=" in vendor, CRLF, misses."""
-    one = b"000001=ONE"
-    assert aiooui._bisect(one, b"000001") == "ONE"
-    assert aiooui._bisect(one, b"000000") is None
-    assert aiooui._bisect(one, b"000002") is None
-    data = b"000001=A\n00000A=B=C\r\n0000FF=LAST"
-    assert aiooui._bisect(data, b"000001") == "A"
-    assert aiooui._bisect(data, b"00000A") == "B=C"
-    assert aiooui._bisect(data, b"0000FF") == "LAST"
-    for miss in (b"000000", b"000002", b"000100", b"FFFFFF"):
-        assert aiooui._bisect(data, miss) is None
+def test_pack_and_lookup_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Small synthetic tables: single entry, ends, "=" in vendor, shared vendors."""
+    build_oui = _import_build_oui(monkeypatch)
+
+    def load(table: dict[int, bytes]) -> aiooui.OUIManager:
+        manager = aiooui.OUIManager()
+        manager._attach(build_oui._pack(table))
+        return manager
+
+    one = load({0x000001: b"ONE"})
+    assert one.get_vendor("00:00:01:aa:bb:cc") == "ONE"
+    assert one.get_vendor("00:00:00:aa:bb:cc") is None
+    assert one.get_vendor("00:00:02:aa:bb:cc") is None
+
+    many = load({0x0000FF: b"LAST", 0x00000A: b"B=C", 0x000001: b"A", 0x000002: b"A"})
+    assert many.get_vendor("00:00:01:00:00:00") == "A"
+    assert many.get_vendor("00:00:02:00:00:00") == "A"
+    assert many.get_vendor("00:00:0A:00:00:00") == "B=C"
+    assert many.get_vendor("00:00:FF:00:00:00") == "LAST"
+    for miss in ("00:00:00", "00:00:03", "00:01:00", "FF:FF:FF"):
+        assert many.get_vendor(miss + ":00:00:00") is None
+
+    empty = load({})
+    assert empty.get_vendor("00:00:00:00:00:00") is None
+    with pytest.raises(ValueError, match="Unexpected vendor"):
+        build_oui._pack({0x000001: b"bad\nvendor"})
+    with pytest.raises(ValueError, match="Unexpected vendor"):
+        build_oui._pack({0x000001: b""})
+    with pytest.raises(UnicodeDecodeError):
+        build_oui._pack({0x000001: b"\xff"})
 
 
 def _import_build_oui(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
@@ -133,6 +206,28 @@ def test_build_rejects_malformed_oui(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValueError, match="Unexpected OUI"):
         build_oui._update_from_oui_content(b"00-00-0X   (base 16)\t\tBROKEN\n")
+
+
+def test_build_parses_ieee_format(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """The IEEE text is parsed, sorted and written in the binary layout."""
+    build_oui = _import_build_oui(monkeypatch)
+    target = tmp_path / "src" / "aiooui" / "oui.data"
+    target.parent.mkdir(parents=True)
+    monkeypatch.setattr(build_oui, "__file__", str(tmp_path / "build_oui.py"))
+    build_oui._update_from_oui_content(
+        b"00-00-0A   (hex)\t\tOMRON\n"
+        b"00000A     (base 16)\t\tOMRON TATEISI ELECTRONICS CO.\n"
+        b"\n"
+        b"00-00-00   (hex)\t\tXEROX\n"
+        b"000000     (base 16)\t\tXEROX CORPORATION\n"
+    )
+    manager = aiooui.OUIManager()
+    manager._attach(target.read_bytes())
+    assert manager._count == 2
+    assert manager.get_vendor("00:00:00:11:22:33") == "XEROX CORPORATION"
+    assert manager.get_vendor("00:00:0A:11:22:33") == "OMRON TATEISI ELECTRONICS CO."
 
 
 def test_build_does_not_retry_malformed_data(monkeypatch: pytest.MonkeyPatch) -> None:
