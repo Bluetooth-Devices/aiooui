@@ -1,9 +1,29 @@
+"""
+Async OUI (MAC vendor prefix) lookups.
+
+How lookups work: ``oui.data`` is never expanded into a dict. ``async_load`` maps
+the file read-only (in the executor), and ``get_vendor`` binary-searches the
+mapping, so the process holds ~0 private memory for the table. The pages are
+touched once during ``async_load`` (so lookups never wait on disk) and stay as
+clean page cache the kernel can reclaim. If mmap is unavailable, the file is read
+into ``bytes`` instead.
+
+The binary search requires ``oui.data`` to be one ``OUI=VENDOR`` entry per line,
+with OUI = exactly 6 uppercase hex digits, unique, and the file SORTED by OUI.
+``build_oui.py`` writes it that way and ``tests/test_init.py`` checks it; do not
+edit the file by hand.
+"""
+
 from __future__ import annotations
 
 __version__ = "0.1.9"
 
 import asyncio
+import mmap
 import pathlib
+
+_NL = b"\n"
+_KEY_LEN = 6  # "001122"; oui.data is "OUI=VENDOR" lines, sorted by OUI (build_oui.py)
 
 _OUI_DATA_FILE = pathlib.Path(__file__).parent.joinpath("oui.data")
 
@@ -13,14 +33,15 @@ class OUIManager:
 
     def __init__(self) -> None:
         """Initialize the OUIManager."""
-        self._oui_to_vendor: dict[str, str] = {}
+        self._oui_to_vendor: bytes | mmap.mmap = b""
         self._load_future: asyncio.Future[None] | None = None
 
     def get_vendor(self, mac: str) -> str | None:
         """Get the vendor for a MAC address."""
         if not self._oui_to_vendor:
             raise RuntimeError("OUI data not loaded, call async_load first")
-        return self._oui_to_vendor.get(mac.replace(":", "")[:6].upper())
+        key = mac.replace(":", "")[:_KEY_LEN].upper().encode()
+        return _bisect(self._oui_to_vendor, key)
 
     async def async_load(self) -> None:
         """Load the OUI data."""
@@ -41,15 +62,45 @@ class OUIManager:
         finally:
             self._load_future = None
 
-    def _load_oui_data(self) -> dict[str, str]:
-        """Load the OUI data."""
-        with open(_OUI_DATA_FILE, encoding="utf-8", errors="replace") as f:
-            oui_to_vendor: dict[str, str] = {}
-            for line in f.read().splitlines():
-                oui, _, vendor = line.partition("=")
-                oui_to_vendor[oui] = vendor
+    def _load_oui_data(self) -> bytes | mmap.mmap:
+        """
+        Load the OUI data.
 
-        return oui_to_vendor
+        The file is memory-mapped read-only and binary-searched on lookup instead of
+        being expanded into a dict of ~37k str entries (~5.6 MB). The pages are
+        faulted in here, in the executor, so that lookups on the event loop do not
+        wait on disk reads; they are clean page cache the kernel can reclaim. Falls
+        back to reading the file into bytes (~1.1 MB) if mmap fails.
+        """
+        with _OUI_DATA_FILE.open("rb") as f:
+            try:
+                data = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+            except (OSError, ValueError):
+                return f.read()
+        for offset in range(0, len(data), mmap.PAGESIZE):
+            data[offset]  # touch every page once (warms page cache and page table)
+        return data
+
+
+def _bisect(data: bytes | mmap.mmap, key: bytes) -> str | None:
+    """Binary search the sorted "OUI=VENDOR" lines in data for key."""
+    lo, hi = 0, len(data)
+    while lo < hi:
+        start = data.rfind(_NL, 0, (lo + hi) // 2) + 1
+        if start < lo:
+            start = lo
+        end = data.find(_NL, start)
+        if end < 0:
+            end = len(data)
+        line_key = data[start : start + _KEY_LEN]
+        if line_key == key:
+            vendor = data[start + _KEY_LEN + 1 : end].rstrip(b"\r")
+            return vendor.decode("utf-8", "replace")
+        if line_key < key:
+            lo = end + 1
+        else:
+            hi = start
+    return None
 
 
 _OUI_MANAGER = OUIManager()
