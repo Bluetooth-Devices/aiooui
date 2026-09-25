@@ -10,6 +10,11 @@ from typing import Any
 
 import setuptools
 
+_OUI_URL = "https://standards-oui.ieee.org/oui.txt"
+# The IEEE site answers HTTP 418 to the default python-requests and aiohttp
+# user agents, so identify the project instead.
+_HEADERS = {"User-Agent": "aiooui (+https://github.com/Bluetooth-Devices/aiooui)"}
+
 
 def build(setup_kwargs: dict[str, Any]) -> None:
     """Build the OUI data."""
@@ -53,7 +58,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
 def _regenerate_ouis_requests() -> None:
     import requests
 
-    resp = requests.get("https://standards-oui.ieee.org/oui.txt", timeout=20)
+    resp = requests.get(_OUI_URL, headers=_HEADERS, timeout=20)
     resp.raise_for_status()
     _update_from_oui_content(resp.content)
 
@@ -61,8 +66,8 @@ def _regenerate_ouis_requests() -> None:
 async def _regenerate_ouis_aiohttp() -> None:
     import aiohttp
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get("https://standards-oui.ieee.org/oui.txt") as resp:
+    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+        async with session.get(_OUI_URL) as resp:
             resp.raise_for_status()
             _update_from_oui_content(await resp.read())
 
