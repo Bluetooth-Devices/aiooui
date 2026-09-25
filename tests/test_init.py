@@ -189,11 +189,7 @@ def test_pack_and_lookup_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _import_build_oui(monkeypatch: pytest.MonkeyPatch) -> types.ModuleType:
-    """Import build_oui, stubbing setuptools when it is not installed."""
-    try:
-        import setuptools  # noqa: F401
-    except ImportError:
-        monkeypatch.setitem(sys.modules, "setuptools", types.ModuleType("setuptools"))
+    """Import a fresh copy of build_oui."""
     monkeypatch.delitem(sys.modules, "build_oui", raising=False)
     import build_oui
 
@@ -236,16 +232,38 @@ def test_build_does_not_retry_malformed_data(monkeypatch: pytest.MonkeyPatch) ->
 
     calls = []
 
-    async def fail_aiohttp():
-        calls.append("aiohttp")
+    def fail_requests():
+        calls.append("requests")
         raise ValueError("Unexpected OUI b'00000X'")
 
-    monkeypatch.setattr(
-        build_oui.setuptools, "setup", lambda **kwargs: None, raising=False
-    )
-    monkeypatch.setattr(build_oui, "_regenerate_ouis_aiohttp", fail_aiohttp)
+    monkeypatch.setattr(build_oui, "_regenerate_ouis_requests", fail_requests)
     monkeypatch.setattr(build_oui.time, "sleep", lambda s: calls.append("sleep"))
-    monkeypatch.delenv("AIOOUI_SKIP_REGENERATE", raising=False)
     with pytest.raises(ValueError):
-        build_oui.build({})
-    assert calls == ["aiohttp"]
+        build_oui.main()
+    assert calls == ["requests"]
+
+
+def test_build_falls_back_or_fails_on_network_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Network errors retry with backoff, then keep the file unless required."""
+    build_oui = _import_build_oui(monkeypatch)
+
+    sleeps: list[int] = []
+
+    def fail_requests():
+        raise OSError("connection refused")
+
+    async def fail_aiohttp():
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(build_oui, "_regenerate_ouis_requests", fail_requests)
+    monkeypatch.setattr(build_oui, "_regenerate_ouis_aiohttp", fail_aiohttp)
+    monkeypatch.setattr(build_oui.time, "sleep", sleeps.append)
+    monkeypatch.delenv("AIOOUI_REQUIRE_REGENERATE", raising=False)
+    build_oui.main()
+    assert sleeps == [5, 10, 20, 40, 80, 160]
+
+    monkeypatch.setenv("AIOOUI_REQUIRE_REGENERATE", "true")
+    with pytest.raises(RuntimeError, match="Failed to regenerate"):
+        build_oui.main()
