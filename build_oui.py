@@ -1,4 +1,10 @@
-"""Build oui table."""
+"""
+Regenerate src/aiooui/oui.data from the IEEE OUI list.
+
+Run ``python build_oui.py``. The release build runs it before ``poetry build``
+with AIOOUI_REQUIRE_REGENERATE set, so a release ships fresh data or fails.
+Without that variable a failed download keeps the committed file.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +13,6 @@ import os
 import pathlib
 import struct
 import time
-from typing import Any
-
-import setuptools
 
 _OUI_URL = "https://standards-oui.ieee.org/oui.txt"
 # The IEEE site answers HTTP 418 to the default python-requests and aiohttp
@@ -19,29 +22,14 @@ _HEADERS = {"User-Agent": "aiooui (+https://github.com/Bluetooth-Devices/aiooui)
 _TIMEOUT = 180
 
 
-def build(setup_kwargs: dict[str, Any]) -> None:
-    """Build the OUI data."""
-    setup_kwargs["maintainer"] = "Bluetooth Devices"
-    setup_kwargs["maintainer_email"] = "bluetooth@koston.org"
-    setup_kwargs["license"] = "MIT"
-    setuptools.setup(
-        **setup_kwargs,
-        long_description_content_type="text/markdown",
-        script_args=["bdist_wheel"],
-        options={
-            "bdist_wheel": {"plat_name": "any"},
-        },
-    )
-    if os.environ.get("AIOOUI_SKIP_REGENERATE"):
-        print("Skipping OUI data regeneration.")
-        return
-
+def main() -> None:
+    """Download the IEEE list and rewrite oui.data, retrying with backoff."""
     for attempt in range(6):
         try:
             if attempt % 2 == 0:
-                asyncio.run(_regenerate_ouis_aiohttp())
-            else:
                 _regenerate_ouis_requests()
+            else:
+                asyncio.run(_regenerate_ouis_aiohttp())
             print(f"Regenerated OUI data on attempt {attempt + 1}.")
             return
         except ValueError:
@@ -51,8 +39,8 @@ def build(setup_kwargs: dict[str, Any]) -> None:
         except Exception as e:
             # The IEEE site is slow and drops connections under load, so back
             # off between attempts: 5, 10, 20, 40, 80 and 160 seconds.
-            time.sleep(5 * 2**attempt)
             print(f"Failed to regenerate OUI data: {e}")
+            time.sleep(5 * 2**attempt)
 
     if os.environ.get("AIOOUI_REQUIRE_REGENERATE"):
         raise RuntimeError("Failed to regenerate OUI data")
@@ -132,4 +120,4 @@ def _pack(oui_to_vendor: dict[int, bytes]) -> bytes:
 
 
 if __name__ == "__main__":
-    build({})
+    main()

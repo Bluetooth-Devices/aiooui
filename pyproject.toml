@@ -36,7 +36,12 @@ version_toml = ["pyproject.toml:tool.poetry.version"]
 version_variables = [
     "src/aiooui/__init__.py:__version__",
 ]
-build_command = "pip install poetry && poetry build"
+# The release build downloads a fresh IEEE list before packaging. The package is
+# pure Python, so poetry must not run a build script (that would tag the wheel
+# with the platform, which PyPI rejects for a plain linux build).
+build_command = "pip install poetry requests aiohttp && python build_oui.py && poetry build"
+# semantic-release runs build_command with only this environment.
+build_command_env = ["AIOOUI_REQUIRE_REGENERATE=true"]
 
 [tool.semantic_release.changelog]
 exclude_commit_patterns = [
@@ -129,9 +134,5 @@ module = "tests.*"
 allow_untyped_defs = true
 
 [build-system]
-requires = ["setuptools>=65.4.1", "wheel", "poetry-core>=1.0.0", 'requests', 'aiohttp']
+requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.build]
-generate-setup-file = true
-script = "build_oui.py"

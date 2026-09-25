@@ -76,8 +76,9 @@ unavailable, the file is read into `bytes` and searched the same way.
 | offsets | `n` byte offsets of each entry's vendor name inside the blob |
 | blob    | UTF-8 vendor names, each terminated by `\n`, deduplicated    |
 
-Regenerate it only with `build_oui.py`, which validates, sorts and packs the
-entries. `tests/test_init.py::test_data_file_is_valid` fails if the file is out of
+Regenerate it only with `python build_oui.py`, which downloads the IEEE list,
+then validates, sorts and packs the entries. The release build runs it before
+packaging, so every release ships fresh data. `tests/test_init.py::test_data_file_is_valid` fails if the file is out of
 order or malformed. An unsorted key array would make lookups silently return
 `None`.
 
