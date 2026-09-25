@@ -124,9 +124,24 @@ def test_bisect_edge_cases():
         assert aiooui._bisect(data, miss) is None
 
 
-def test_build_rejects_malformed_oui():
-    """A malformed IEEE entry raises before oui.data is written."""
+def _import_build_oui(monkeypatch):
+    """Import build_oui, stubbing setuptools when it is not installed."""
+    import sys
+    import types
+
+    try:
+        import setuptools  # noqa: F401
+    except ImportError:
+        monkeypatch.setitem(sys.modules, "setuptools", types.ModuleType("setuptools"))
+    monkeypatch.delitem(sys.modules, "build_oui", raising=False)
     import build_oui
+
+    return build_oui
+
+
+def test_build_rejects_malformed_oui(monkeypatch):
+    """A malformed IEEE entry raises before oui.data is written."""
+    build_oui = _import_build_oui(monkeypatch)
 
     with pytest.raises(ValueError, match="Unexpected OUI"):
         build_oui._update_from_oui_content(b"00-00-0X   (base 16)\t\tBROKEN\n")
@@ -134,7 +149,7 @@ def test_build_rejects_malformed_oui():
 
 def test_build_does_not_retry_malformed_data(monkeypatch):
     """Validation errors are not retried or swallowed by the download loop."""
-    import build_oui
+    build_oui = _import_build_oui(monkeypatch)
 
     calls = []
 
@@ -142,7 +157,9 @@ def test_build_does_not_retry_malformed_data(monkeypatch):
         calls.append("aiohttp")
         raise ValueError("Unexpected OUI b'00000X'")
 
-    monkeypatch.setattr(build_oui.setuptools, "setup", lambda **kwargs: None)
+    monkeypatch.setattr(
+        build_oui.setuptools, "setup", lambda **kwargs: None, raising=False
+    )
     monkeypatch.setattr(build_oui, "_regenerate_ouis_aiohttp", fail_aiohttp)
     monkeypatch.setattr(build_oui.time, "sleep", lambda s: calls.append("sleep"))
     monkeypatch.delenv("AIOOUI_SKIP_REGENERATE", raising=False)
