@@ -47,7 +47,29 @@ Start by importing it:
 
 ```python
 import aiooui
+
+await aiooui.async_load()
+aiooui.get_vendor("00:00:00:11:22:33")  # "XEROX CORPORATION"
 ```
+
+## How lookups work
+
+The OUI table (`src/aiooui/oui.data`, ~37k entries, ~1.1 MB) is not loaded into a
+dict. `async_load()` reads the file into `bytes` in an executor, and
+`get_vendor()` binary-searches it (a few microseconds per lookup). The table costs
+~1.1 MB of memory instead of the ~5.6 MB that a dict of ~37k strings takes.
+
+### Data file format — must stay sorted
+
+The binary search depends on `oui.data` being:
+
+- one `OUI=VENDOR` entry per line, separated by `\n`;
+- OUI = exactly 6 uppercase hexadecimal digits, each appearing once;
+- **sorted by OUI**.
+
+Regenerate it only with `build_oui.py`, which validates and sorts the entries.
+`tests/test_init.py::test_data_file_is_sorted` fails if the file is out of order
+or malformed. A file that is unsorted would make lookups silently return `None`.
 
 ## Contributors ✨
 
