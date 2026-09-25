@@ -14,6 +14,8 @@ _OUI_URL = "https://standards-oui.ieee.org/oui.txt"
 # The IEEE site answers HTTP 418 to the default python-requests and aiohttp
 # user agents, so identify the project instead.
 _HEADERS = {"User-Agent": "aiooui (+https://github.com/Bluetooth-Devices/aiooui)"}
+# The 6.6 MB list can take close to a minute to arrive from the IEEE site.
+_TIMEOUT = 180
 
 
 def build(setup_kwargs: dict[str, Any]) -> None:
@@ -46,7 +48,9 @@ def build(setup_kwargs: dict[str, Any]) -> None:
             # silently keeping the existing file.
             raise
         except Exception as e:
-            time.sleep(5)
+            # The IEEE site is slow and drops connections under load, so back
+            # off between attempts: 5, 10, 20, 40, 80 and 160 seconds.
+            time.sleep(5 * 2**attempt)
             print(f"Failed to regenerate OUI data: {e}")
 
     if os.environ.get("AIOOUI_REQUIRE_REGENERATE"):
@@ -58,7 +62,7 @@ def build(setup_kwargs: dict[str, Any]) -> None:
 def _regenerate_ouis_requests() -> None:
     import requests
 
-    resp = requests.get(_OUI_URL, headers=_HEADERS, timeout=20)
+    resp = requests.get(_OUI_URL, headers=_HEADERS, timeout=_TIMEOUT)
     resp.raise_for_status()
     _update_from_oui_content(resp.content)
 
@@ -66,7 +70,8 @@ def _regenerate_ouis_requests() -> None:
 async def _regenerate_ouis_aiohttp() -> None:
     import aiohttp
 
-    async with aiohttp.ClientSession(headers=_HEADERS) as session:
+    timeout = aiohttp.ClientTimeout(total=_TIMEOUT)
+    async with aiohttp.ClientSession(headers=_HEADERS, timeout=timeout) as session:
         async with session.get(_OUI_URL) as resp:
             resp.raise_for_status()
             _update_from_oui_content(await resp.read())

@@ -52,17 +52,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - uses: snok/install-poetry@v1.3.4
-      - name: Install Dependencies (not main branch)
+      - name: Install Dependencies
         run: poetry install -vvv
-        if: github.ref_name != 'main'
         env:
+          # Tests run against the committed oui.data. Only the release build
+          # downloads the IEEE list, see the release job.
           AIOOUI_SKIP_REGENERATE: "true"
-        shell: bash
-      - name: Install Dependencies (main branch)
-        run: poetry install -vvv
-        if: github.ref_name == 'main'
-        env:
-          AIOOUI_REQUIRE_REGENERATE: "true"
         shell: bash
       - name: Test with Pytest
         run: poetry run pytest --cov-report=xml
@@ -123,12 +118,16 @@ jobs:
           BRANCH: ${{ github.ref_name }}
         run: git switch -C "$BRANCH"
 
-      # On main branch: actual PSR + upload to PyPI & GitHub
+      # On main branch: actual PSR + upload to PyPI & GitHub. The build
+      # regenerates oui.data from the IEEE list so every release ships fresh
+      # data, and fails rather than silently shipping the committed file.
       - name: Release
         uses: python-semantic-release/python-semantic-release@v9.21.0
         id: release
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          AIOOUI_REQUIRE_REGENERATE: "true"
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
